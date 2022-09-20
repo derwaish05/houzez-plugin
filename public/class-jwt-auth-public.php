@@ -9,7 +9,7 @@ use \Firebase\JWT\JWT;
  * @link       https://enriquechavez.co
  * @since      1.0.0
  */
-
+ 
 /**
  * The public-facing functionality of the plugin.
  *
@@ -77,6 +77,10 @@ class Jwt_Auth_Public
             'callback' => array($this, 'generate_token'),
         ));
 
+        register_rest_route($this->namespace, 'token/get_account', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'get_account_db'),
+        ));
         register_rest_route($this->namespace, 'token/validate', array(
             'methods' => 'POST',
             'callback' => array($this, 'validate_token'),
@@ -96,6 +100,15 @@ class Jwt_Auth_Public
          register_rest_route($this->namespace, 'token/get_list', array(
             'methods' => 'POST',
             'callback' => array($this, 'get_list_token'),
+        ));
+
+         register_rest_route($this->namespace, 'token/send_otp', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'send_otp_db'),
+        ));
+         register_rest_route($this->namespace, 'token/otp_verification', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'otp_verification_db'),
         ));
     }
 
@@ -172,6 +185,7 @@ class Jwt_Auth_Public
         /** The token is signed, now create the object with no sensible user data to the client*/
         $data = array(
             'token' => $token,
+            'user_id' => $user->data->ID,
             'user_email' => $user->data->user_email,
             'user_nicename' => $user->data->user_nicename,
             'user_display_name' => $user->data->display_name,
@@ -191,6 +205,119 @@ class Jwt_Auth_Public
               }
          return apply_filters( 'username_exists', $user_id, $username );
           }
+
+      public function get_account_db($request)
+    {
+        $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
+        
+        $userdata = array('ID' => $request->get_param('user_id'));
+        /** First thing, check the secret key if not exist return a error*/
+        if (!$secret_key) {
+            return new WP_Error(
+                'jwt_auth_bad_config',
+                __('JWT is not configurated properly, please contact the admin', 'wp-api-jwt-auth'),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+        /** Try to authenticate the user with the passed credentials*/
+        $user = get_user_by('ID',$request->get_param('user_id'));
+        
+        /** If the authentication fails return a error*/
+        if (is_wp_error($user)) {
+            $error_code = $user->get_error_code();
+            return new WP_Error(
+                '[jwt_auth] ' . $error_code,
+                $user->get_error_message($error_code),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+          return $user->data; 
+        
+    }
+
+      public function send_otp_db($request)
+    {
+        $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
+        
+        $userdata = array('user_email' => $request->get_param('user_email'));
+        /** First thing, check the secret key if not exist return a error*/
+        if (!$secret_key) {
+            return new WP_Error(
+                'jwt_auth_bad_config',
+                __('JWT is not configurated properly, please contact the admin', 'wp-api-jwt-auth'),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+        /** Try to authenticate the user with the passed credentials*/
+        $user = get_user_by('email',$request->get_param('user_email'));
+                $user_activation_code = md5(rand());
+                $user_otp = rand(100000, 999999);
+                $metas = array(
+                'user_otp'=>$user_otp
+            );
+
+            foreach($metas as $key => $value) {
+                update_user_meta($user->data->ID, $key, $value );
+            }
+        /** If the authentication fails return a error*/
+        if (is_wp_error($user)) {
+            $error_code = $user->get_error_code();
+            return new WP_Error(
+                '[jwt_auth] ' . $error_code,
+                $user->get_error_message($error_code),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+       return $user_otp;
+        
+    }
+      public function otp_verification_db($request)
+    {
+        $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
+        
+        $meta_value = $request->get_param('user_otp');
+        
+        /** First thing, check the secret key if not exist return a error*/
+        if (!$secret_key) {
+            return new WP_Error(
+                'jwt_auth_bad_config',
+                __('JWT is not configurated properly, please contact the admin', 'wp-api-jwt-auth'),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+        /** Try to authenticate the user with the passed credentials*/
+        
+                
+                $key='user_otp';
+                $user = reset(get_users(array('meta_key' => $key, 'meta_value' => $meta_value) ));
+        global $wpdb;
+        $user_id =$wpdb->query('UPDATE wp_users SET user_status = 1 WHERE ID = '.$user->data->ID);
+          
+        /** If the authentication fails return a error*/
+        if (is_wp_error($user)) {
+            $error_code = $user->get_error_code();
+            return new WP_Error(
+                '[jwt_auth] ' . $error_code,
+                $user->get_error_message($error_code),
+                array(
+                    'status' => 403,
+                )
+            );
+        }
+      return $user->data->ID; die();
+        
+    }    
+
     public function register_token($request)
     {
     
