@@ -265,6 +265,11 @@ class Jwt_Auth_Public
             foreach($metas as $key => $value) {
                 update_user_meta($user->data->ID, $key, $value );
             }
+           $subject="OTP"; 
+           $attachments="";
+           $headers="";
+           $to=$request->get_param('user_email');
+           wp_mail( $to, $subject, $user_otp, $headers, $attachments ); 
         /** If the authentication fails return a error*/
         if (is_wp_error($user)) {
             $error_code = $user->get_error_code();
